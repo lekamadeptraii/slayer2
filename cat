@@ -872,6 +872,6 @@ task.spawn(function()
         end
 
         -- Giảm thời gian chờ xuống mức thấp nhất để tăng tốc độ roll
-        task.wait(0.005)
+        task.wait(0.001)
     end
 end)
