@@ -70,11 +70,116 @@ local function executeInstantSkipLoading()
     end)
 end
 
+local function clickButtonSafe(btn)
+    if not btn then return end
+    pcall(function()
+        if typeof(firesignal) == "function" then
+            firesignal(btn.MouseButton1Click)
+        end
+    end)
+    pcall(function()
+        for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+            conn:Fire()
+        end
+    end)
+    pcall(function()
+        if typeof(firesignal) == "function" and btn:FindFirstChild("Activated") then
+            firesignal(btn.Activated)
+        end
+    end)
+    pcall(function()
+        for _, conn in ipairs(getconnections(btn.Activated)) do
+            conn:Fire()
+        end
+    end)
+end
+
+local function acceptConfirmationPopups()
+    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pGui then return false end
+
+    local clicked = false
+
+    -- 1. Bắt chính xác popup thông báo câu hỏi trong MenuPopups (QuestionCounter / QuestionStrip / Popup...)
+    pcall(function()
+        local popups = pGui:FindFirstChild("MenuPopups")
+        if popups then
+            for _, desc in ipairs(popups:GetDescendants()) do
+                if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+                    local isConfirm = false
+                    local parent = desc.Parent
+
+                    -- Kiểm tra nền nút màu xanh lá (Green > Red: nút đồng ý / Yes)
+                    local bg = (parent and parent:FindFirstChild("BG")) or desc:FindFirstChild("BG")
+                    if bg and bg:IsA("GuiObject") and bg.BackgroundColor3.G > bg.BackgroundColor3.R then
+                        isConfirm = true
+                    end
+
+                    -- Kiểm tra icon check xanh (checkmark rbxassetid://86786939359303)
+                    local img = (parent and parent:FindFirstChildWhichIsA("ImageLabel", true)) or desc:FindFirstChildWhichIsA("ImageLabel", true)
+                    if img and (string.find(tostring(img.Image), "86786939359303") or string.find(string.lower(tostring(img.Image)), "check")) then
+                        isConfirm = true
+                    end
+
+                    -- Kiểm tra nếu nằm trong ZButtonsHolder và là nút đầu tiên (nút Yes bên trái)
+                    local zb = desc:FindFirstAncestor("ZButtonsHolder")
+                    if zb then
+                        local frames = {}
+                        for _, child in ipairs(zb:GetChildren()) do
+                            if child:IsA("Frame") then
+                                table.insert(frames, child)
+                            end
+                        end
+                        if #frames > 0 and (desc:IsDescendantOf(frames[1]) or desc.Parent == frames[1]) then
+                            isConfirm = true
+                        end
+                    end
+
+                    if isConfirm then
+                        clickButtonSafe(desc)
+                        clicked = true
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 2. Quét dự phòng toàn bộ PlayerGui nếu có dialog xác nhận code khác
+    pcall(function()
+        for _, desc in ipairs(pGui:GetDescendants()) do
+            if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+                local txt = string.lower(desc:IsA("TextButton") and desc.Text or "")
+                if txt == "yes" or txt == "đồng ý" or txt == "chấp nhận" or txt == "confirm" or txt == "accept" then
+                    if not desc:IsDescendantOf(pGui:FindFirstChild("Components", true)) or desc:FindFirstAncestor("MenuPopups") then
+                        clickButtonSafe(desc)
+                        clicked = true
+                    end
+                end
+            end
+        end
+    end)
+
+    return clicked
+end
+
+-- Tự động kích hoạt khi có popup xuất hiện trong MenuPopups
+pcall(function()
+    local pGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+    local popups = pGui and pGui:WaitForChild("MenuPopups", 5)
+    if popups then
+        popups.DescendantAdded:Connect(function()
+            task.wait(0.02)
+            acceptConfirmationPopups()
+        end)
+    end
+end)
+
 executeInstantSkipLoading()
 task.spawn(function()
     for _ = 1, 15 do
         task.wait(0.2)
         executeInstantSkipLoading()
+        acceptConfirmationPopups()
     end
 end)
 
@@ -184,46 +289,96 @@ local CODES = {
     "M1LL1ON"
 }
 
--- Discord Webhook (Fixed HTTP Request Compatibility)
-local WEBHOOK_URL = (getgenv and (getgenv().Webhook or getgenv().webhook)) or _G.Webhook or _G.webhook or ""
+-- Discord Webhook (Dynamic getgenv().webhook Loader & Multi-Executor Support)
+local function getWebhookUrl()
+    local genv = (typeof(getgenv) == "function" and getgenv()) or {}
+    local raw = genv.webhook or genv.Webhook or genv.WEBHOOK or _G.webhook or _G.Webhook or _G.WEBHOOK
+    if typeof(raw) == "string" and raw ~= "" then
+        local clean = string.gsub(raw, "%s+", "")
+        if string.find(clean, "discord") and string.find(clean, "webhooks") then
+            return clean
+        end
+    end
+    return nil
+end
 
-local function sendDiscordWebhook(username, password, clanName)
-    if not WEBHOOK_URL or WEBHOOK_URL == "" then return end
-    task.spawn(function()
-        pcall(function()
-            local req = (syn and syn.request) or (http and http.request) or http_request or request
-            if typeof(req) ~= "function" then return end
+local function executeHttpRequest(payload)
+    local targetUrl = getWebhookUrl()
+    if not targetUrl then return end
 
-            local HttpService = game:GetService("HttpService")
-            local payload = {
-                username = "Cat Hub Kaitun",
-                avatar_url = "https://tr.rbxcdn.com/180DAY-1f6a7f4d99f93f847f3c094b7cd3e55d/420/420/Image/Webp/noFilter",
-                embeds = {
-                    {
-                        title = "🎉 0.1% SUPREME CLAN ROLLED!",
-                        description = "Cat Hub has automatically halted rolling and secured the account!",
-                        color = 16762930,
-                        fields = {
-                            {name = "👤 Username", value = "```" .. tostring(username) .. "```", inline = true},
-                            {name = "🔑 Password", value = "```" .. tostring(password) .. "```", inline = true},
-                            {name = "⚡ Clan Rolled", value = "```" .. tostring(clanName) .. " (0.1%)```", inline = false},
-                            {name = "⏰ Timestamp", value = os.date("%d/%m/%Y - %H:%M:%S"), inline = false}
-                        },
-                        footer = {text = "Cat Hub Kaitun Edition • Auto Logger"}
-                    }
-                }
-            }
+    local req = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request)
+    if typeof(req) ~= "function" then return end
 
-            req({
-                Url = WEBHOOK_URL,
+    local HttpService = game:GetService("HttpService")
+    local bodyJson = HttpService:JSONEncode(payload)
+
+    for attempt = 1, 3 do
+        local ok, res = pcall(function()
+            return req({
+                Url = targetUrl,
+                url = targetUrl,
                 Method = "POST",
+                method = "POST",
                 Headers = {
-                    ["Content-Type"] = "application/json",
-                    ["User-Agent"] = "Mozilla/5.0"
+                    ["Content-Type"] = "application/json"
                 },
-                Body = HttpService:JSONEncode(payload)
+                headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = bodyJson,
+                body = bodyJson
             })
         end)
+        if ok and res and (res.StatusCode == 200 or res.StatusCode == 204 or res.Success) then
+            break
+        end
+        task.wait(1)
+    end
+end
+
+local function sendDiscordWebhook(username, password, clanName)
+    task.spawn(function()
+        local payload = {
+            username = "Cat Hub Kaitun",
+            avatar_url = "https://tr.rbxcdn.com/180DAY-1f6a7f4d99f93f847f3c094b7cd3e55d/420/420/Image/Webp/noFilter",
+            embeds = {
+                {
+                    title = "🎉 0.1% SUPREME CLAN ROLLED!",
+                    description = "Cat Hub has automatically halted rolling and secured the account!",
+                    color = 16762930,
+                    fields = {
+                        {name = "👤 Username", value = "```" .. tostring(username or LocalPlayer.Name) .. "```", inline = true},
+                        {name = "🔑 Password", value = "```" .. tostring(password or "Unknown") .. "```", inline = true},
+                        {name = "⚡ Clan Rolled", value = "```" .. tostring(clanName) .. " (0.1%)```", inline = false},
+                        {name = "⏰ Timestamp", value = os.date("%d/%m/%Y - %H:%M:%S"), inline = false}
+                    },
+                    footer = {text = "Cat Hub Kaitun Edition • Auto Logger"}
+                }
+            }
+        }
+        executeHttpRequest(payload)
+    end)
+end
+
+local function sendDiscordWebhookStatus(title, description, color)
+    task.spawn(function()
+        local payload = {
+            username = "Cat Hub Kaitun",
+            avatar_url = "https://tr.rbxcdn.com/180DAY-1f6a7f4d99f93f847f3c094b7cd3e55d/420/420/Image/Webp/noFilter",
+            embeds = {
+                {
+                    title = title,
+                    description = description,
+                    color = color or 3447003,
+                    fields = {
+                        {name = "👤 Tài khoản", value = "```" .. tostring(LocalPlayer.Name) .. "```", inline = true},
+                        {name = "⏰ Thời gian", value = os.date("%d/%m/%Y - %H:%M:%S"), inline = true}
+                    },
+                    footer = {text = "Cat Hub Kaitun Edition • Status Monitor"}
+                }
+            }
+        }
+        executeHttpRequest(payload)
     end)
 end
 
@@ -255,9 +410,10 @@ local function saveAccountStatus(username, clanName)
                 writefile("status.txt", (currentStatus or "") .. lineToSave)
             end
         end
-
-        sendDiscordWebhook(username, pass, clanName)
     end)
+
+    -- Luôn gửi webhook kể cả khi đọc file bị lỗi
+    sendDiscordWebhook(username, pass, clanName)
     return username .. ":" .. pass
 end
 
@@ -611,18 +767,38 @@ task.spawn(function()
         return
     end
 
-    -- STEP 1: REDEEM PROMO CODES
+    -- STEP 1: REDEEM PROMO CODES (AUTO-ACCEPT CONFIRMATION POPUPS)
     statusText.Text = "Redeeming codes..."
     statusText.TextColor3 = Color3.fromRGB(255, 200, 50)
     statusDot.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
 
+    local autoAcceptActive = true
+    task.spawn(function()
+        while autoAcceptActive do
+            acceptConfirmationPopups()
+            task.wait(0.04)
+        end
+    end)
+
     for _, code in ipairs(CODES) do
-        pcall(SignalFunction.ToServer, "RedeemCode", code)
+        task.spawn(function()
+            pcall(SignalFunction.ToServer, "RedeemCode", code)
+        end)
+
+        local startWait = tick()
+        while tick() - startWait < 1.2 do
+            if acceptConfirmationPopups() then
+                task.wait(0.15)
+                break
+            end
+            task.wait(0.05)
+        end
         task.wait(0.1)
     end
 
     pcall(SignalFunction.ToServer, "CodeStatus")
-    task.wait(0.2)
+    task.wait(0.3)
+    autoAcceptActive = false
 
     local _, updatedSpins = fetchPlayerData()
     cachedSpins = updatedSpins > 0 and updatedSpins or 105
@@ -631,6 +807,7 @@ task.spawn(function()
     statusText.Text = "Turbo Rolling..."
     statusText.TextColor3 = Color3.fromRGB(80, 220, 100)
     statusDot.BackgroundColor3 = Color3.fromRGB(80, 220, 100)
+    sendDiscordWebhookStatus("🚀 BẮT ĐẦU ROLL CLAN", string.format("Bắt đầu tự động roll clan cho tài khoản **%s** với **%s** lượt quay.", LocalPlayer.Name, tostring(cachedSpins)), 3066993)
     task.wait(0.1)
 
     -- STEP 2: TURBO ZERO-DELAY AUTO ROLL
@@ -687,6 +864,8 @@ task.spawn(function()
                     statusText.Text = "Out of spins (0 Spins remaining)!"
                     statusText.TextColor3 = Color3.fromRGB(220, 70, 70)
                     statusDot.BackgroundColor3 = Color3.fromRGB(220, 70, 70)
+                    local curC, _ = fetchPlayerData()
+                    sendDiscordWebhookStatus("⚠️ HẾT LƯỢT QUAY (Out of Spins)", string.format("Tài khoản **%s** đã hết lượt quay spins (%s rolls). Clan hiện tại: **%s**.", LocalPlayer.Name, tostring(rollCount), tostring(curC)), 15158332)
                     break
                 end
             end
