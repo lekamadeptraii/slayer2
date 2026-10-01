@@ -360,28 +360,6 @@ local function sendDiscordWebhook(username, password, clanName)
     end)
 end
 
-local function sendDiscordWebhookStatus(title, description, color)
-    task.spawn(function()
-        local payload = {
-            username = "Cat Hub Kaitun",
-            avatar_url = "https://tr.rbxcdn.com/180DAY-1f6a7f4d99f93f847f3c094b7cd3e55d/420/420/Image/Webp/noFilter",
-            embeds = {
-                {
-                    title = title,
-                    description = description,
-                    color = color or 3447003,
-                    fields = {
-                        {name = "👤 Tài khoản", value = "```" .. tostring(LocalPlayer.Name) .. "```", inline = true},
-                        {name = "⏰ Thời gian", value = os.date("%d/%m/%Y - %H:%M:%S"), inline = true}
-                    },
-                    footer = {text = "Cat Hub Kaitun Edition • Status Monitor"}
-                }
-            }
-        }
-        executeHttpRequest(payload)
-    end)
-end
-
 local function saveAccountStatus(username, clanName)
     local pass = "Unknown"
     pcall(function()
@@ -807,7 +785,6 @@ task.spawn(function()
     statusText.Text = "Turbo Rolling..."
     statusText.TextColor3 = Color3.fromRGB(80, 220, 100)
     statusDot.BackgroundColor3 = Color3.fromRGB(80, 220, 100)
-    sendDiscordWebhookStatus("🚀 BẮT ĐẦU ROLL CLAN", string.format("Bắt đầu tự động roll clan cho tài khoản **%s** với **%s** lượt quay.", LocalPlayer.Name, tostring(cachedSpins)), 3066993)
     task.wait(0.1)
 
     -- STEP 2: TURBO ZERO-DELAY AUTO ROLL
@@ -864,14 +841,12 @@ task.spawn(function()
                     statusText.Text = "Out of spins (0 Spins remaining)!"
                     statusText.TextColor3 = Color3.fromRGB(220, 70, 70)
                     statusDot.BackgroundColor3 = Color3.fromRGB(220, 70, 70)
-                    local curC, _ = fetchPlayerData()
-                    sendDiscordWebhookStatus("⚠️ HẾT LƯỢT QUAY (Out of Spins)", string.format("Tài khoản **%s** đã hết lượt quay spins (%s rolls). Clan hiện tại: **%s**.", LocalPlayer.Name, tostring(rollCount), tostring(curC)), 15158332)
                     break
                 end
             end
         end
 
         -- Giảm thời gian chờ xuống mức thấp nhất để tăng tốc độ roll
-        task.wait(0.0036)
+        task.wait(0.005)
     end
 end)
