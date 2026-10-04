@@ -286,7 +286,8 @@ local TARGET_CLANS = {
 }
 
 local CODES = {
-    "M1LL1ON"
+    "M1LL1ON",
+    "ROGUELIKE"
 }
 
 -- Discord Webhook (Dynamic getgenv().webhook Loader & Multi-Executor Support)
