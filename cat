@@ -391,7 +391,6 @@ local function saveAccountStatus(username, clanName)
         end
     end)
 
-    -- Luôn gửi webhook kể cả khi đọc file bị lỗi
     sendDiscordWebhook(username, pass, clanName)
     return username .. ":" .. pass
 end
@@ -746,7 +745,7 @@ task.spawn(function()
         return
     end
 
-    -- STEP 1: REDEEM PROMO CODES (AUTO-ACCEPT CONFIRMATION POPUPS)
+    -- STEP 1: REDEEM PROMO CODES (ENHANCED AUTO-REDEEM & POPUP BYPASS)
     statusText.Text = "Redeeming codes..."
     statusText.TextColor3 = Color3.fromRGB(255, 200, 50)
     statusDot.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
@@ -754,29 +753,52 @@ task.spawn(function()
     local autoAcceptActive = true
     task.spawn(function()
         while autoAcceptActive do
+            pcall(function()
+                local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+                if pGui then
+                    for _, desc in ipairs(pGui:GetDescendants()) do
+                        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+                            local txt = string.lower(desc:IsA("TextButton") and desc.Text or "")
+                            if txt == "yes" or txt == "đồng ý" or txt == "chấp nhận" or txt == "confirm" or txt == "accept" or string.find(txt, "nhận") or string.find(txt, "claim") then
+                                clickButtonSafe(desc)
+                            end
+                        end
+                    end
+                end
+            end)
             acceptConfirmationPopups()
-            task.wait(0.04)
+            task.wait(0.03)
         end
     end)
 
     for _, code in ipairs(CODES) do
-        task.spawn(function()
-            pcall(SignalFunction.ToServer, "RedeemCode", code)
-        end)
+        for i = 1, 2 do
+            task.spawn(function()
+                pcall(function()
+                    SignalFunction.ToServer("RedeemCode", code)
+                end)
+                pcall(function()
+                    local remote = ReplicatedStorage:FindFirstChild("Communication", true) and ReplicatedStorage.Communication:FindFirstChild("RedeemCode", true)
+                    if remote and remote:IsA("RemoteFunction") then
+                        remote:InvokeServer(code)
+                    elseif remote and remote:IsA("RemoteEvent") then
+                        remote:FireServer(code)
+                    end
+                end)
+            end)
+            task.wait(0.1)
+        end
 
         local startWait = tick()
-        while tick() - startWait < 1.2 do
-            if acceptConfirmationPopups() then
-                task.wait(0.15)
-                break
-            end
+        while tick() - startWait < 1.5 do
+            acceptConfirmationPopups()
             task.wait(0.05)
         end
-        task.wait(0.1)
+        task.wait(0.2)
     end
 
-    pcall(SignalFunction.ToServer, "CodeStatus")
-    task.wait(0.3)
+    pcall(function() SignalFunction.ToServer("CodeStatus") end)
+    task.wait(0.4)
     autoAcceptActive = false
 
     local _, updatedSpins = fetchPlayerData()
@@ -847,7 +869,6 @@ task.spawn(function()
             end
         end
 
-        -- Giảm thời gian chờ xuống mức thấp nhất để tăng tốc độ roll
         task.wait(0.005)
     end
 end)
